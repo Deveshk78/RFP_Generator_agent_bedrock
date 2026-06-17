@@ -13,6 +13,7 @@ class Settings:
     aws_region: str
     bedrock_model_id: str
     dynamodb_table: str
+    bedrock_read_timeout: int
 
 
 def get_settings() -> Settings:
@@ -33,4 +34,5 @@ def get_settings() -> Settings:
             "BEDROCK_MODEL_ID", "us.anthropic.claude-sonnet-4-6"
         ),
         dynamodb_table=os.getenv("DYNAMODB_TABLE", "RfpAgent"),
+        bedrock_read_timeout=int(os.getenv("BEDROCK_READ_TIMEOUT", "600")),
     )

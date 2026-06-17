@@ -1,122 +1,207 @@
-# RFP Agent
+# RFP Generator Agent (Amazon Bedrock + DynamoDB)
 
-Executable RFP (Request for Proposal) agent powered by **Amazon Bedrock** and **Amazon DynamoDB**.
+AI-powered **Request for Proposal (RFP)** generator for software engineering programs across multiple industry domains. Built with **Amazon Bedrock** (Claude), **DynamoDB**, **FastAPI**, and a responsive **Next.js** web UI (Tailwind + shadcn/ui).
+
+**Repository:** [github.com/Deveshk78/RFP_Generator_agent_bedrock](https://github.com/Deveshk78/RFP_Generator_agent_bedrock)
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Architecture](#architecture)
+- [Industry Domains](#industry-domains)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Running the Application](#running-the-application)
+- [Web UI Guide](#web-ui-guide)
+- [CLI Reference](#cli-reference)
+- [API Reference](#api-reference)
+- [Project Structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
+- [Security](#security)
+
+---
 
 ## Features
 
-- **Store RFPs** in DynamoDB with metadata and status tracking
-- **Analyze RFPs** using Bedrock (requirements, deadlines, evaluation criteria, risks)
-- **Generate proposals** tailored to your company profile
-- **Interactive chat** to ask questions about any stored RFP
+| Feature | Description |
+|---------|-------------|
+| **Domain RFP Generation** | Generate detailed, domain-specific RFP documents via Bedrock |
+| **Word Export** | Auto-export formatted `.docx` files with cover page and sections |
+| **RFP Analysis** | Extract requirements, compliance checklists, risk matrices, evaluation criteria |
+| **Proposal Drafting** | Generate vendor proposal responses from company profile |
+| **AI Chat** | Formatted Markdown answers, Mermaid diagrams, voice input |
+| **Persistence** | DynamoDB single-table design for RFPs, analysis, proposals, chat history |
+| **Responsive UI** | Laptop, tablet, iPhone, and Android layouts (Tailwind + shadcn) |
+| **CLI** | Full command-line interface for scripting and automation |
+
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         User (Browser / CLI)                     │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+         ┌───────────────────┴───────────────────┐
+         ▼                                       ▼
+┌─────────────────┐                   ┌─────────────────┐
+│  Next.js Web UI │                   │  rfp-agent CLI  │
+│  (port 3000)    │                   │  (main.py)      │
+└────────┬────────┘                   └────────┬────────┘
+         │ /api/* proxy                         │
+         ▼                                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    FastAPI Backend (port 8000)                │
+└────────┬───────────────────────────────┬────────────────────┘
+         ▼                               ▼
+┌─────────────────┐             ┌─────────────────┐
+│ Amazon Bedrock  │             │   DynamoDB      │
+└─────────────────┘             └─────────────────┘
+         ▼
+┌─────────────────┐
+│ output/rfps/    │  ← Generated .docx files
+└─────────────────┘
+```
+
+### DynamoDB Single-Table Design
+
+| PK | SK | Purpose |
+|----|-----|---------|
+| `RFP#{uuid}` | `METADATA` | RFP document, title, status, domain |
+| `RFP#{uuid}` | `ANALYSIS#{timestamp}` | AI analysis results |
+| `RFP#{uuid}` | `PROPOSAL#{timestamp}` | Generated proposals |
+| `RFP#{uuid}` | `MSG#{timestamp}` | Chat message history |
+
+---
+
+## Industry Domains
+
+13 pre-built templates: Oil & Gas, Solar, Battery, Wave, Water, Wind, Legal Analytics, Healthcare, Hospitals, Hotels, Trading, Banking, Finance.
+
+---
 
 ## Prerequisites
 
 - Python 3.10+
-- AWS account with:
-  - **Amazon Bedrock** model access enabled (Claude 3.5 Sonnet recommended)
-  - **DynamoDB** permissions to create/read/write tables
-  - IAM permissions for `bedrock:Converse` and DynamoDB operations
+- Node.js 18+ (web UI)
+- AWS account with Bedrock + DynamoDB access
 
-## Quick Start
+---
 
-1. **Install and configure**
+## Installation
 
 ```bash
-cd Bedrock001
+git clone https://github.com/Deveshk78/RFP_Generator_agent_bedrock.git
+cd RFP_Generator_agent_bedrock
+
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+cd web && npm install && cd ..
 cp .env.example .env
+cp web/.env.local.example web/.env.local
 ```
 
-Edit `.env` with your AWS credentials:
+---
+
+## Configuration
 
 ```env
 AWS_ACCESS_KEY_ID=your_access_key
 AWS_SECRET_ACCESS_KEY=your_secret_key
 AWS_REGION=us-east-1
 BEDROCK_MODEL_ID=us.anthropic.claude-sonnet-4-6
+BEDROCK_READ_TIMEOUT=600
 DYNAMODB_TABLE=RfpAgent
 ```
 
-2. **Make the launcher executable**
+---
+
+## Running the Application
 
 ```bash
-chmod +x rfp-agent
+chmod +x start-all.sh start-api.sh start-web.sh rfp-agent
+./start-all.sh
 ```
 
-3. **Initialize DynamoDB table**
+Open **http://localhost:3000**
+
+---
+
+## Web UI Guide
+
+| Page | Description |
+|------|-------------|
+| `/` | Domain gallery + recent RFPs |
+| `/generate` | Create domain-specific RFP + Word download |
+| `/rfp/[id]` | Document, Analysis, Proposal, Chat tabs |
+
+**Chat:** Markdown formatting, Mermaid diagrams, voice input (mic button).
+
+---
+
+## CLI Reference
 
 ```bash
 ./rfp-agent init
-```
-
-4. **Create an RFP**
-
-```bash
-./rfp-agent create --title "Cloud Migration RFP" --content "We seek a vendor to migrate..."
-# or from a file:
-./rfp-agent create --title "Cloud Migration RFP" --file ./samples/rfp.txt
-```
-
-5. **List and analyze**
-
-```bash
+./rfp-agent create --title "..." --file samples/rfp.txt
 ./rfp-agent list
-./rfp-agent analyze --rfp-id <uuid-from-create>
-```
-
-6. **Generate a proposal**
-
-```bash
-./rfp-agent propose \
-  --rfp-id <uuid> \
-  --company "Acme Corp" \
-  --profile "Acme Corp is a cloud consulting firm with 10+ years experience..."
-```
-
-7. **Chat about an RFP**
-
-```bash
+./rfp-agent analyze --rfp-id <uuid>
+./rfp-agent propose --rfp-id <uuid> --company "Acme" --profile-file samples/company_profile.txt
 ./rfp-agent chat --rfp-id <uuid>
 ```
 
-## Commands
+---
 
-| Command | Description |
-|---------|-------------|
-| `init` | Create DynamoDB table if it does not exist |
-| `create` | Store a new RFP (`--title`, `--content` or `--file`) |
-| `list` | List all stored RFPs |
-| `show` | Show full RFP content (`--rfp-id`) |
-| `analyze` | Run Bedrock analysis on an RFP |
-| `propose` | Generate a proposal draft |
-| `chat` | Interactive Q&A session about an RFP |
+## API Reference
 
-## Architecture
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/health` | Health check |
+| GET | `/api/domains` | Industry domains |
+| GET | `/api/rfps` | List RFPs |
+| POST | `/api/rfps/generate` | Generate RFP + docx |
+| POST | `/api/rfps/{id}/analyze` | Analyze RFP |
+| POST | `/api/rfps/{id}/propose` | Generate proposal |
+| POST | `/api/rfps/{id}/chat` | Chat |
+| GET | `/api/rfps/{id}/download` | Download .docx |
+
+---
+
+## Project Structure
 
 ```
-┌─────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  rfp-agent  │────▶│  Amazon Bedrock  │     │   DynamoDB      │
-│  CLI (main) │     │  (Converse API)  │     │   RfpAgent      │
-└─────────────┘     └──────────────────┘     │   single-table  │
-       │                                      └─────────────────┘
-       └──────────────────────────────────────────────▶
+├── api/server.py          # FastAPI backend
+├── src/                   # Bedrock agent, DynamoDB, docx export, domains
+├── web/                   # Next.js + Tailwind + shadcn UI
+├── main.py                # CLI
+├── rfp-agent              # CLI launcher
+├── start-all.sh           # Run everything
+└── samples/               # Sample files
 ```
 
-DynamoDB single-table design:
-- `RFP#{id} / METADATA` — RFP document
-- `RFP#{id} / ANALYSIS#{timestamp}` — analysis results
-- `RFP#{id} / PROPOSAL#{timestamp}` — generated proposals
-- `RFP#{id} / MSG#{timestamp}` — chat history
+---
+
+## Troubleshooting
+
+| Error | Fix |
+|-------|-----|
+| Load failed | Run `./start-api.sh` |
+| Bedrock read timeout | Set `BEDROCK_READ_TIMEOUT=900`, restart API |
+| Model not found | Use `us.anthropic.claude-sonnet-4-6` inference profile |
+
+---
 
 ## Security
 
-- Never commit `.env` or AWS credentials to version control
-- Rotate access keys if they were exposed
-- Use IAM roles with least-privilege policies in production
+- Never commit `.env` or credentials
+- Rotate exposed AWS/GitHub credentials immediately
+- Use IAM least-privilege in production
 
-## Alternative: run without launcher
+---
 
-```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python main.py init
-```
+**Author:** [Deveshk78](https://github.com/Deveshk78)

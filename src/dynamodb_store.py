@@ -56,9 +56,18 @@ class DynamoDBStore:
         waiter = self._client.get_waiter("table_exists")
         waiter.wait(TableName=self.table_name)
 
-    def create_rfp(self, title: str, content: str) -> dict[str, Any]:
+    def create_rfp(
+        self,
+        title: str,
+        content: str,
+        *,
+        domain_id: str | None = None,
+        domain_label: str | None = None,
+        category: str | None = None,
+        organization: str | None = None,
+    ) -> dict[str, Any]:
         rfp_id = str(uuid.uuid4())
-        item = {
+        item: dict[str, Any] = {
             "PK": f"RFP#{rfp_id}",
             "SK": "METADATA",
             "entity_type": "rfp",
@@ -69,6 +78,14 @@ class DynamoDBStore:
             "created_at": _now_iso(),
             "updated_at": _now_iso(),
         }
+        if domain_id:
+            item["domain_id"] = domain_id
+        if domain_label:
+            item["domain_label"] = domain_label
+        if category:
+            item["category"] = category
+        if organization:
+            item["organization"] = organization
         self.table.put_item(Item=item)
         return item
 
@@ -187,3 +204,14 @@ class DynamoDBStore:
             Limit=limit,
         )
         return response.get("Items", [])
+
+    def set_docx_ready(self, rfp_id: str, docx_path: str) -> None:
+        self.table.update_item(
+            Key={"PK": f"RFP#{rfp_id}", "SK": "METADATA"},
+            UpdateExpression="SET docx_path = :path, has_docx = :ready, updated_at = :updated",
+            ExpressionAttributeValues={
+                ":path": docx_path,
+                ":ready": True,
+                ":updated": _now_iso(),
+            },
+        )

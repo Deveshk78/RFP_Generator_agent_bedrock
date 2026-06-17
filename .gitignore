@@ -6,4 +6,9 @@ venv/
 *.egg-info/
 dist/
 build/
-.DS_Store
+output/
+*.code-workspace
+web/.env.local
+node_modules/
+web/node_modules/
+web/.next/
