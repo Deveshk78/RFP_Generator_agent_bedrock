@@ -1,0 +1,32 @@
+REQUEST FOR PROPOSAL: Enterprise Cloud Migration Services
+
+Issuing Organization: Metro Health Systems
+RFP Number: MHS-2026-CLOUD-001
+Submission Deadline: August 15, 2026 at 5:00 PM EST
+
+1. BACKGROUND
+Metro Health Systems operates 12 regional clinics and requires migration of
+on-premises workloads to AWS, including EHR integrations, imaging systems,
+and internal business applications.
+
+2. SCOPE OF WORK
+- Assess current infrastructure and produce migration roadmap
+- Migrate 80+ VMs and 15 TB of data to AWS
+- Implement HIPAA-compliant architecture
+- Provide 90-day post-migration support
+
+3. MANDATORY REQUIREMENTS
+- Vendor must hold AWS Advanced Consulting Partner status
+- Minimum 5 years healthcare cloud migration experience
+- Provide references from at least 3 healthcare clients
+- Submit signed NDA with proposal
+
+4. EVALUATION CRITERIA
+- Technical approach (35%)
+- Healthcare experience (25%)
+- Cost (20%)
+- Timeline (10%)
+- References (10%)
+
+5. SUBMISSION FORMAT
+Submit PDF proposal (max 40 pages) via email to procurement@metrohealth.example.org

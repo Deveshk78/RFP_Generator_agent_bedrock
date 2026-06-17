@@ -1,0 +1,12 @@
+Acme Cloud Solutions is a cloud consulting and managed services provider.
+
+Core capabilities:
+- AWS migration and modernization
+- DevOps and CI/CD implementation
+- 24/7 managed cloud operations
+- Security and compliance (SOC 2, HIPAA-ready architectures)
+
+Differentiators:
+- 150+ successful cloud migrations
+- Certified AWS Advanced Consulting Partner
+- Fixed-price and T&M engagement models
