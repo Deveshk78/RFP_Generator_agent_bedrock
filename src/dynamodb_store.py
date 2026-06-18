@@ -86,6 +86,8 @@ class DynamoDBStore:
             item["category"] = category
         if organization:
             item["organization"] = organization
+        # initial review state
+        item["needs_review"] = False
         self.table.put_item(Item=item)
         return item
 
@@ -214,4 +216,17 @@ class DynamoDBStore:
                 ":ready": True,
                 ":updated": _now_iso(),
             },
+        )
+
+    def mark_needs_review(self, rfp_id: str, reason: str | None = None) -> None:
+        values = {":needs": True, ":updated": _now_iso()}
+        expr = "SET needs_review = :needs, updated_at = :updated"
+        if reason:
+            expr += ", review_reason = :reason"
+            values[":reason"] = reason
+
+        self.table.update_item(
+            Key={"PK": f"RFP#{rfp_id}", "SK": "METADATA"},
+            UpdateExpression=expr,
+            ExpressionAttributeValues=values,
         )

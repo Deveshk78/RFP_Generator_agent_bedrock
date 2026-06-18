@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
@@ -16,6 +16,9 @@ from src.config import get_settings
 from src.docx_export import export_rfp_to_docx
 from src.domains import DOMAIN_BY_ID, DOMAINS
 from src.dynamodb_store import DynamoDBStore
+from src.validator import validate_rfp_markdown
+from src.generation import generate_rfp_with_validation
+import os
 
 app = FastAPI(title="RFP Generator Agent", version="1.0.0")
 
@@ -33,6 +36,18 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 _settings = get_settings()
 _store = DynamoDBStore(_settings)
 _agent = BedrockAgent(_settings)
+
+# Simple API key middleware: set API_KEY env var to enable
+API_KEY = os.getenv("API_KEY", "")
+
+
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):
+    if API_KEY:
+        key = request.headers.get("x-api-key") or request.query_params.get("api_key")
+        if not key or key != API_KEY:
+            raise HTTPException(status_code=401, detail="Unauthorized")
+    return await call_next(request)
 
 
 class GenerateRfpRequest(BaseModel):
@@ -167,19 +182,9 @@ def generate_rfp(body: GenerateRfpRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Unknown domain")
 
     try:
-        content = _agent.generate_rfp_document(
-            title=body.title,
-            domain_label=domain.label,
-            domain_category=domain.category,
-            domain_description=domain.description,
-            compliance=domain.compliance,
-            typical_systems=domain.typical_systems,
-            project_summary=body.project_summary,
-            budget_range=body.budget_range,
-            timeline=body.timeline,
-            organization=body.organization,
+        content, missing_after = generate_rfp_with_validation(
+            _agent, domain, body, max_attempts=2
         )
-
         if not content or len(content.strip()) < 100:
             raise HTTPException(
                 status_code=500,
@@ -206,6 +211,11 @@ def generate_rfp(body: GenerateRfpRequest) -> dict[str, Any]:
             category=domain.category,
         )
         _store.set_docx_ready(rfp_id, str(docx_path))
+
+        # If validation failed after allowed reruns, mark needs_review and attach reason
+        if missing_after:
+            reason = f"Missing sections: {', '.join(missing_after)}"
+            _store.mark_needs_review(rfp_id, reason)
 
         _store.table.update_item(
             Key={"PK": f"RFP#{rfp_id}", "SK": "METADATA"},
