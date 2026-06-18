@@ -214,6 +214,30 @@ Open **http://localhost:3000**
 
 **Author:** [Deveshk78](https://github.com/Deveshk78)
 
+## AI Agent Compliance
+
+This project implements a focused AI Agent specialized for Request for Proposal (RFP) workflows. Below is a concise compliance summary you can use for audit, documentation, or product pages.
+
+- Agent classification: request-driven AI Agent (CLI + HTTP API) — not an autonomous background planner.
+- Core LLM: Amazon Bedrock (via boto3 bedrock-runtime client). Model is configurable via environment settings.
+- Agent persona & structure: explicit system prompts enforce RFP analyst behavior, analysis formatting, and chat rules (see `src/bedrock_agent.py`).
+- Capabilities (evidence):
+    - RFP generation: `generate_rfp_document()` produces publish-ready RFPs tailored to domains.
+    - RFP analysis: `analyze_rfp()` extracts requirements, evaluation criteria, risks, and compliance checklists.
+    - Proposal drafting: `generate_proposal()` creates vendor proposal drafts from a company profile.
+    - Conversational assistant: `chat_about_rfp()` with chat history persisted in DynamoDB.
+- Persistence and audit: single-table DynamoDB store (`src/dynamodb_store.py`) records RFP metadata, analyses, proposals, and chat messages with timestamps.
+- Artifact export: `.docx` export implemented in `src/docx_export.py` and served by the API (`/api/rfps/{id}/download`).
+- Domains and templates: 13+ industry domains in `src/domains.py` (domain-specific compliance and typical systems).
+- Controls & safety: prompt/system-level structure, context truncation, Bedrock client timeouts and limited temperature. Errors and empty responses are handled and surfaced as HTTP errors or CLI errors.
+
+Limitations and recommended mitigations:
+- No automatic schema validation of generated content (recommended: add post-generation validators or JSON output + JSON Schema checks).
+- No production API authentication or rate limiting (recommended: add token/JWT protection and throttling).
+- Hallucination/fact-checking is currently manual — add verification passes, or lightweight fact-extraction checks.
+
+If you want, I can add a post-generation validator that enforces required section headings and flags RFPs needing human review (I can implement code + tests and wire it into the API). 
+
 ## Screenshots
 
 Quick preview (placeholders). Replace these with real screenshots by saving under `assets/screenshots/`:
