@@ -116,4 +116,12 @@ export const api = {
       body: JSON.stringify({ message }),
     }),
   downloadUrl: (id: string) => `/api/rfps/${id}/download`,
+  needsReview: () => request<{ rfp_id: string; title: string; review_reason?: string; updated_at?: string }[]>(
+    "/api/admin/needs-review"
+  ),
+  approveRfp: (id: string, approver?: string) =>
+    request<{ rfp_id: string; approved_by: string; role: string }>(`/api/admin/approve/${id}`, {
+      method: "POST",
+      headers: approver ? { "x-approver": approver } : undefined,
+    }),
 };

@@ -210,6 +210,47 @@ Open **http://localhost:3000**
 - Rotate exposed AWS/GitHub credentials immediately
 - Use IAM least-privilege in production
 
+## Admin Review UI, Authentication, and Rate Limiting
+
+This repository now includes a lightweight admin review workflow and improvements for production readiness.
+
+- Admin UI
+    - A Next.js page is available at `web/app/admin/needs-review/page.tsx`. It calls the backend endpoint `GET /api/admin/needs-review` and displays RFPs marked with `needs_review`.
+    - Approvers can click Approve which calls `POST /api/admin/approve/{rfp_id}`. The client sends an optional `x-approver` header which is recorded.
+    - The UI expects an API token (client-side) stored in `localStorage` under the key `apiToken` for the current demo implementation. For production use, the UI should use proper authentication flows (OIDC/OAuth) and pass a JWT in the Authorization header.
+
+- Authentication (JWT + backward-compatible tokens)
+    - The backend now supports JWT validation (preferred) and falls back to static tokens for backward compatibility.
+    - Environment variables:
+        - `JWT_PUBLIC_KEY` — RSA public key for RS256-signed JWTs (preferred)
+        - `JWT_SECRET` — HMAC secret for HS256-signed JWTs (alternative)
+        - `JWT_ALGORITHM` — algorithm to validate (default: RS256)
+        - `VALID_TOKENS` — comma-separated token[:role] entries for legacy setups (e.g. `token1:admin,token2:reviewer`). If `VALID_TOKENS` is set and JWT is not provided, the middleware requires a token.
+    - JWTs should contain a `role` claim (`admin` or `reviewer`) so the approve endpoint can enforce role-based access.
+
+- Rate limiting (Redis-backed recommended)
+    - The middleware enforces per-token (or per-IP) rate limits. By default this is an in-memory limiter (`RATE_LIMIT_PER_MINUTE`, default 120). For multi-instance deployments use Redis:
+        - Set `REDIS_URL` to enable Redis-backed sliding-window rate limiting.
+        - The middleware stores recent request timestamps in a Redis sorted set per token/key.
+
+- Audit trail
+    - Approvals and review actions are persisted as `REVIEW#<timestamp>` items in the DynamoDB table via `DynamoDBStore.record_review()`.
+    - Metadata `METADATA` item is updated with `reviewed_by` and `reviewed_at` fields when a review is recorded.
+
+- Running locally (tests)
+    - This project uses a virtual environment under `.venv/` for local dev. To install dependencies and run the tests:
+
+```bash
+# create virtualenv (if you don't have .venv)
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+# run all tests
+.venv/bin/python -m pytest -q
+```
+
+    - The new tests include `tests/test_admin_approve.py` which validates the approve endpoint role enforcement and a small rate-limiting behavior. The tests mock the store to avoid AWS calls.
+
 ---
 
 **Author:** [Deveshk78](https://github.com/Deveshk78)
@@ -337,6 +378,26 @@ Suggested next concrete tasks I can implement now (pick 1–2)
 - Add an automated “post-generation sanity check” that asserts presence of these headings: Introduction, Scope, Deliverables, Evaluation Criteria, Submission Instructions; if any missing, mark item `needs_review`.
 - Add simple API auth middleware (token-based) to protect endpoints.
 Which of these should I implement first? If you want, I’ll start by adding a post-generation validator (code + tests) and wire it into `api/server.py` so generated RFPs are automatically validated and flagged for human review when incomplete.
+
+## Notes & Suggestions
+
+Operational notes:
+
+- For production deployments, use a managed cache (Redis or DynamoDB with TTL) for rate-limiting counters instead of the in-memory approach used in development.
+- Configure `API_KEY` (legacy) and `VALID_TOKENS` (comma-separated) environment variables for lifecycle management of service tokens; prefer rotating tokens via your secrets manager.
+- Persist model response metadata (model id, temperature, tokens used) for auditing and cost analysis.
+
+Product suggestions:
+
+- Have the model return both structured JSON and Markdown (the implementation below requests JSON+Markdown) — JSON is validated and used to populate the RFP schema, Markdown is the human-readable artifact.
+- Add an admin UI (protected by token auth) to review RFPs flagged `needs_review`, approve them, and optionally re-run generation with targeted prompts.
+- Consider a human-in-the-loop review queue where generated RFPs remain `needs_review` until a reviewer approves.
+
+Security & compliance:
+
+- Use IAM roles for the API server in cloud deployments (avoid embedded AWS keys).
+- Store `VALID_TOKENS` or other secrets in a secret manager and rotate regularly.
+- Use HTTPS and enforce secure headers on the web UI and API.
 
 ## Screenshots
 

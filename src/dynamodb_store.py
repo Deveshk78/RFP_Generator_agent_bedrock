@@ -230,3 +230,31 @@ class DynamoDBStore:
             UpdateExpression=expr,
             ExpressionAttributeValues=values,
         )
+
+    def record_review(self, rfp_id: str, approver: str | None, action: str = "approved", note: str | None = None) -> dict[str, Any]:
+        """Record a review action as a REVIEW#TIMESTAMP item and update METADATA."""
+        timestamp = _now_iso()
+        item = {
+            "PK": f"RFP#{rfp_id}",
+            "SK": f"REVIEW#{timestamp}",
+            "entity_type": "review",
+            "rfp_id": rfp_id,
+            "action": action,
+            "approver": approver,
+            "note": note,
+            "created_at": timestamp,
+        }
+        self.table.put_item(Item=item)
+        # update metadata
+        self.table.update_item(
+            Key={"PK": f"RFP#{rfp_id}", "SK": "METADATA"},
+            UpdateExpression="SET needs_review = :nr, review_reason = :rr, reviewed_by = :rb, reviewed_at = :ts, updated_at = :updated",
+            ExpressionAttributeValues={
+                ":nr": False,
+                ":rr": None,
+                ":rb": approver or "unknown",
+                ":ts": timestamp,
+                ":updated": timestamp,
+            },
+        )
+        return item

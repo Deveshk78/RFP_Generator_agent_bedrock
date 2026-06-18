@@ -19,6 +19,17 @@ from src.dynamodb_store import DynamoDBStore
 from src.validator import validate_rfp_markdown
 from src.generation import generate_rfp_with_validation
 import os
+import time
+from collections import deque, defaultdict
+from typing import Tuple, Optional
+try:
+    import jwt
+except Exception:
+    jwt = None
+try:
+    import redis
+except Exception:
+    redis = None
 
 app = FastAPI(title="RFP Generator Agent", version="1.0.0")
 
@@ -37,16 +48,104 @@ _settings = get_settings()
 _store = DynamoDBStore(_settings)
 _agent = BedrockAgent(_settings)
 
-# Simple API key middleware: set API_KEY env var to enable
-API_KEY = os.getenv("API_KEY", "")
+
+# Token-role auth and in-memory rate limiter
+# VALID_TOKENS env var format: token1[:role],token2[:role]
+# e.g. "abc123:admin,def456:reviewer,ghi789" (default role is 'user')
+_VALID_TOKENS_RAW = os.getenv("VALID_TOKENS", "")
+VALID_TOKENS: dict[str, str] = {}
+for part in [p.strip() for p in _VALID_TOKENS_RAW.split(",") if p.strip()]:
+    if ":" in part:
+        token, role = part.split(":", 1)
+        VALID_TOKENS[token] = role
+    else:
+        VALID_TOKENS[part] = "user"
+
+# JWT config: prefer JWT validation when public key or secret is set
+JWT_PUBLIC_KEY = os.getenv("JWT_PUBLIC_KEY")
+JWT_SECRET = os.getenv("JWT_SECRET")
+JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "RS256")
+
+# Redis config for production-grade rate limiting
+REDIS_URL = os.getenv("REDIS_URL")
+from typing import Any as _Any
+_redis_client: Optional[_Any] = None
+if REDIS_URL and redis:
+    try:
+        _redis_client = redis.from_url(REDIS_URL)
+    except Exception:
+        _redis_client = None
+
+# Rate limit: requests per minute per token (or per-IP if no token)
+RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "120"))
+_rate_buckets: dict[str, deque[float]] = defaultdict(deque)
+
+
+def _get_request_key(request: Request) -> Tuple[str, str]:
+    """Return (key, role) where key is token/ip and role is resolved.
+
+    Resolves JWT tokens (if present and valid) first, then API tokens.
+    """
+    # try JWT from Authorization header
+    auth = request.headers.get("authorization") or ""
+    if auth.lower().startswith("bearer "):
+        token = auth.split(None, 1)[1]
+        try:
+            payload = None
+            if JWT_PUBLIC_KEY:
+                payload = jwt.decode(token, JWT_PUBLIC_KEY, algorithms=[JWT_ALGORITHM])
+            elif JWT_SECRET:
+                payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            if payload:
+                role = payload.get("role", "user")
+                sub = payload.get("sub") or payload.get("user") or token
+                return f"jwt:{sub}", role
+        except Exception:
+            # fallthrough to token-based check
+            pass
+
+    # fallback to API key header or query param
+    token = request.headers.get("x-api-key") or request.query_params.get("api_key")
+    if token:
+        role = VALID_TOKENS.get(token, "unknown")
+        return token, role
+
+    client_ip = request.client.host if request.client else "unknown"
+    return f"ip:{client_ip}", "anon"
 
 
 @app.middleware("http")
-async def api_key_middleware(request: Request, call_next):
-    if API_KEY:
-        key = request.headers.get("x-api-key") or request.query_params.get("api_key")
-        if not key or key != API_KEY:
-            raise HTTPException(status_code=401, detail="Unauthorized")
+async def auth_and_rate_limit_middleware(request: Request, call_next):
+    # If VALID_TOKENS is configured, require a known token for protected endpoints
+    if VALID_TOKENS:
+        token = request.headers.get("x-api-key") or request.query_params.get("api_key")
+        if not token or token not in VALID_TOKENS:
+            raise HTTPException(status_code=401, detail="Unauthorized: missing or invalid token")
+
+    # Rate limiting: prefer Redis-backed limiter when available
+    key, role = _get_request_key(request)
+    now = int(time.time())
+    if _redis_client:
+        # use Redis simple sliding window via sorted set
+        zkey = f"ratelimit:{key}"
+        _redis_client.zremrangebyscore(zkey, 0, now - 60)
+        count = _redis_client.zcard(zkey)
+        if count >= RATE_LIMIT_PER_MINUTE:
+            raise HTTPException(status_code=429, detail="Rate limit exceeded")
+        _redis_client.zadd(zkey, {str(now): now})
+        _redis_client.expire(zkey, 65)
+    else:
+        # in-memory fallback
+        bucket = _rate_buckets[key]
+        # purge entries older than 60 seconds
+        while bucket and now - bucket[0] > 60:
+            bucket.popleft()
+        if len(bucket) >= RATE_LIMIT_PER_MINUTE:
+            raise HTTPException(status_code=429, detail="Rate limit exceeded")
+        bucket.append(now)
+
+    # attach role to request.state for handlers to use
+    request.state.token_role = role
     return await call_next(request)
 
 
@@ -301,6 +400,28 @@ def list_needs_review() -> list[dict[str, Any]]:
         }
         for item in items
     ]
+
+
+
+@app.post("/api/admin/approve/{rfp_id}")
+def approve_rfp(rfp_id: str, request: Request) -> dict[str, Any]:
+    """Approve an RFP that was previously marked as needing review.
+
+    Requires a token with role 'reviewer' or 'admin'.
+    """
+    role = getattr(request.state, "token_role", "anon")
+    if role not in ("reviewer", "admin"):
+        raise HTTPException(status_code=403, detail="Forbidden: reviewer role required")
+
+    item = _store.get_rfp(rfp_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="RFP not found")
+
+    # record review in history and update metadata
+    approver = request.headers.get("x-approver") or "unknown"
+    review_item = _store.record_review(rfp_id, approver, action="approved")
+
+    return {"rfp_id": rfp_id, "approved_by": approver, "role": role, "review_id": review_item["SK"]}
 
 
 @app.get("/api/rfps/{rfp_id}/chat")
