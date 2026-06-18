@@ -1,3 +1,5 @@
+<img src="assets/icon.svg" alt="RFP Generator Agent" width="120" />
+
 # RFP Generator Agent (Amazon Bedrock + DynamoDB)
 
 AI-powered **Request for Proposal (RFP)** generator for software engineering programs across multiple industry domains. Built with **Amazon Bedrock** (Claude), **DynamoDB**, **FastAPI**, and a responsive **Next.js** web UI (Tailwind + shadcn/ui).
