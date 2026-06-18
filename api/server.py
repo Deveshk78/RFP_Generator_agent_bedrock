@@ -288,6 +288,21 @@ def propose_rfp(rfp_id: str, body: ProposeRequest) -> dict[str, Any]:
     return {"proposal": proposal}
 
 
+@app.get("/api/admin/needs-review")
+def list_needs_review() -> list[dict[str, Any]]:
+    """Return RFP summaries that are marked for review."""
+    items = _store.table.scan(FilterExpression="needs_review = :nr", ExpressionAttributeValues={":nr": True}).get("Items", [])
+    return [
+        {
+            "rfp_id": item.get("rfp_id"),
+            "title": item.get("title"),
+            "review_reason": item.get("review_reason"),
+            "updated_at": item.get("updated_at"),
+        }
+        for item in items
+    ]
+
+
 @app.get("/api/rfps/{rfp_id}/chat")
 def get_chat(rfp_id: str) -> list[dict[str, str]]:
     if not _store.get_rfp(rfp_id):
