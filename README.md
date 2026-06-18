@@ -1,4 +1,10 @@
-<img src="assets/icon.svg" alt="RFP Generator Agent" width="120" />
+<p align="left">
+    <img src="assets/icon.svg" alt="RFP Generator Agent" width="120" />
+    <a href="https://github.com/Deveshk78/RFP_Generator_agent_bedrock/actions/workflows/ci.yml"><img src="https://github.com/Deveshk78/RFP_Generator_agent_bedrock/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+    <img src="https://img.shields.io/github/license/Deveshk78/RFP_Generator_agent_bedrock" alt="License" />
+    <a href="https://github.com/Deveshk78/RFP_Generator_agent_bedrock/releases"><img src="https://img.shields.io/github/v/release/Deveshk78/RFP_Generator_agent_bedrock?label=release" alt="Release"/></a>
+    <a href="https://github.com/Deveshk78/RFP_Generator_agent_bedrock/actions/workflows/pages.yml"><img src="https://img.shields.io/github/pages-deploy-status/Deveshk78/RFP_Generator_agent_bedrock" alt="Pages"/></a>
+</p>
 
 # RFP Generator Agent (Amazon Bedrock + DynamoDB)
 
@@ -207,3 +213,42 @@ Open **http://localhost:3000**
 ---
 
 **Author:** [Deveshk78](https://github.com/Deveshk78)
+
+## Screenshots
+
+Quick preview (placeholders). Replace these with real screenshots by saving under `assets/screenshots/`:
+
+![Screenshot 1](assets/screenshots/screenshot-1.svg)
+
+![Screenshot 2](assets/screenshots/screenshot-2.svg)
+
+## Quick start (summary)
+
+1. Create a Python virtualenv and install deps:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+2. Install web deps:
+
+```bash
+cd web && npm install && cd ..
+```
+
+3. Decode PNG icons (optional):
+
+```bash
+./scripts/decode-icons.sh
+```
+
+4. Start backend and web UI (development):
+
+```bash
+./start-api.sh
+./start-web.sh
+```
+
+Visit the Docs site (when deployed) at: https://deveshk78.github.io/RFP_Generator_agent_bedrock (or check the Pages badge above).
